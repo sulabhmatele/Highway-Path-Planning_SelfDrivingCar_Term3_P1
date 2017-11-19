@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "spline.h"
 
 using namespace std;
 
@@ -238,6 +239,65 @@ int main() {
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
 
+/*			int nextWayPoint = NextWaypoint(car_x, car_y, deg2rad(car_yaw), map_waypoints_x, map_waypoints_y);
+
+            double nextWP_s = map_waypoints_s[nextWayPoint];
+            double nextWP_dx = map_waypoints_dx[nextWayPoint];
+            double nextWP_dy = map_waypoints_dy[nextWayPoint];*/
+
+            double dist_inc = 0.4;
+            for(int i = 0; i < 50; i++)
+            {
+                double next_s = car_s + (i + 1) * dist_inc;
+                double next_d = 2;
+
+                vector<double> nextXY = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+                next_x_vals.push_back(nextXY[0]);//car_x+(dist_inc*i)*cos(deg2rad(car_yaw)));
+                next_y_vals.push_back(nextXY[1]);//car_y+(dist_inc*i)*sin(deg2rad(car_yaw)));
+
+                car_yaw = car_yaw + (car_speed/0.442) * tan(car_yaw);
+            }
+
+/*            double pos_x;
+            double pos_y;
+            double angle;
+            tk::spline fit;
+
+            int path_size = previous_path_x.size();
+
+            for(int i = 0; i < path_size; i++)
+            {
+                next_x_vals.push_back(previous_path_x[i]);
+                next_y_vals.push_back(previous_path_y[i]);
+            }
+
+            if(path_size == 0)
+            {
+                pos_x = car_x;
+                pos_y = car_y;
+                angle = deg2rad(car_yaw);
+            }
+            else
+            {
+                pos_x = previous_path_x[path_size-1];
+                pos_y = previous_path_y[path_size-1];
+
+                double pos_x2 = previous_path_x[path_size-2];
+                double pos_y2 = previous_path_y[path_size-2];
+                angle = atan2(pos_y-pos_y2,pos_x-pos_x2);
+            }
+
+            double dist_inc = 0.44;
+            for(int i = 0; i < 50-path_size; i++)
+            {
+                next_x_vals.push_back(pos_x+(dist_inc)*cos(angle));
+                next_y_vals.push_back(pos_y+(dist_inc)*sin(angle));
+                angle = angle + (i+1) * (dist_inc/0.442) * atan(car_yaw);
+
+                pos_x += (dist_inc)*cos(angle);
+                pos_y += (dist_inc)*sin(angle);
+            }*/
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           	msgJson["next_x"] = next_x_vals;

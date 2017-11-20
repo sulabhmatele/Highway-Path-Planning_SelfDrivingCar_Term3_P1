@@ -197,7 +197,10 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  int lane_num = 1;
+  double ref_v = 49.5;
+
+  h.onMessage([&lane_num, &ref_v, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -236,8 +239,7 @@ int main() {
 
           	json msgJson;
 
-          	vector<double> next_x_vals;
-          	vector<double> next_y_vals;
+            int prev_size = previous_path_x.size();
 
 /*			int nextWayPoint = NextWaypoint(car_x, car_y, deg2rad(car_yaw), map_waypoints_x, map_waypoints_y);
 
@@ -245,7 +247,7 @@ int main() {
             double nextWP_dx = map_waypoints_dx[nextWayPoint];
             double nextWP_dy = map_waypoints_dy[nextWayPoint];*/
 
-            double dist_inc = 0.4;
+/*            double dist_inc = 0.4;
             for(int i = 0; i < 50; i++)
             {
                 double next_s = car_s + (i + 1) * dist_inc;
@@ -257,47 +259,111 @@ int main() {
                 next_y_vals.push_back(nextXY[1]);//car_y+(dist_inc*i)*sin(deg2rad(car_yaw)));
 
                 car_yaw = car_yaw + (car_speed/0.442) * tan(car_yaw);
+            }*/
+
+            // Widely spaced points in 30m apart then fit spline and fill the points to get ref v
+            vector<double> pts_x;
+            vector<double> pts_y;
+
+            double ref_x = car_x;
+            double ref_y = car_y;
+            double ref_angle = deg2rad(car_yaw);
+
+            if(prev_size < 2)
+            {
+                double car_prev_x = car_x - cos(car_yaw);
+                double car_prev_y = car_y - sin(car_yaw);
+
+                pts_x.push_back(car_prev_x);
+                pts_x.push_back(car_x);
+
+                pts_y.push_back(car_prev_y);
+                pts_y.push_back(car_y);
+            }
+            else
+            {
+                ref_x = previous_path_x[prev_size-1];
+                ref_y = previous_path_y[prev_size-1];
+
+                double ref_prev_x = previous_path_x[prev_size-2];
+                double ref_prev_y = previous_path_y[prev_size-2];
+
+                ref_angle = atan2(ref_y-ref_prev_y,ref_x-ref_prev_x);
+
+                pts_x.push_back(ref_prev_x);
+                pts_x.push_back(ref_x);
+
+                pts_y.push_back(ref_prev_y);
+                pts_y.push_back(ref_y);
             }
 
-/*            double pos_x;
-            double pos_y;
-            double angle;
-            tk::spline fit;
+            vector<double> nextWP0 = getXY(car_s + 30, (2 + 4 * lane_num), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> nextWP1 = getXY(car_s + 60, (2 + 4 * lane_num), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> nextWP2 = getXY(car_s + 90, (2 + 4 * lane_num), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
-            int path_size = previous_path_x.size();
+            pts_x.push_back(nextWP0[0]);
+            pts_x.push_back(nextWP1[0]);
+            pts_x.push_back(nextWP2[0]);
 
-            for(int i = 0; i < path_size; i++)
+            pts_y.push_back(nextWP0[1]);
+            pts_y.push_back(nextWP1[1]);
+            pts_y.push_back(nextWP2[1]);
+
+            for(int i = 0; i < pts_x.size() ; i++)
+            {
+                // Shift to Car ref angle of 0 degree
+                double shift_x = pts_x[i] - ref_x;
+                double shift_y = pts_y[i] - ref_y;
+
+                pts_x[i] = (shift_x * cos(0-ref_angle) - shift_y * sin(0-ref_angle));
+                pts_y[i] = (shift_x * sin(0-ref_angle) + shift_y * cos(0-ref_angle));
+            }
+
+            tk::spline fit_s;
+
+            fit_s.set_points(pts_x,pts_y);
+
+            vector<double> next_x_vals;
+            vector<double> next_y_vals;
+
+            for(int i = 0; i < prev_size; i++)
             {
                 next_x_vals.push_back(previous_path_x[i]);
                 next_y_vals.push_back(previous_path_y[i]);
             }
 
-            if(path_size == 0)
-            {
-                pos_x = car_x;
-                pos_y = car_y;
-                angle = deg2rad(car_yaw);
-            }
-            else
-            {
-                pos_x = previous_path_x[path_size-1];
-                pos_y = previous_path_y[path_size-1];
+            //Calculate the spacing of points
+            double target_x = 30.0;
+            double target_y = fit_s(target_x);
 
-                double pos_x2 = previous_path_x[path_size-2];
-                double pos_y2 = previous_path_y[path_size-2];
-                angle = atan2(pos_y-pos_y2,pos_x-pos_x2);
-            }
+            double target_dist = sqrt((target_x * target_x) + (target_y * target_y));
+            double x_add_on = 0;
 
+            // Fill the rest of the points after filling prev points
             double dist_inc = 0.44;
-            for(int i = 0; i < 50-path_size; i++)
+            for(int i = 1; i < 50-prev_size; i++)
             {
-                next_x_vals.push_back(pos_x+(dist_inc)*cos(angle));
-                next_y_vals.push_back(pos_y+(dist_inc)*sin(angle));
-                angle = angle + (i+1) * (dist_inc/0.442) * atan(car_yaw);
+                double N = (target_dist/(0.02 * ref_v/2.24)); // steps req for desired speed = distance/distance/sec ; 2.24 - makes miles per hour to meters per sec ??????? 22.4 ???
 
-                pos_x += (dist_inc)*cos(angle);
-                pos_y += (dist_inc)*sin(angle);
-            }*/
+                double x_point = x_add_on + (target_x/N);
+                double y_point = fit_s(x_point);
+
+                x_add_on = x_point;
+
+                double x_point_backup = x_point;
+                double y_point_backup = y_point;
+
+                // Rotate back to global coordinates
+                x_point = (x_point_backup * cos(ref_angle) - y_point_backup * sin(ref_angle));
+                y_point = (x_point_backup * sin(ref_angle) + y_point_backup * cos(ref_angle));
+
+                x_point += ref_x;
+                y_point += ref_y;
+
+                next_x_vals.push_back(x_point);
+                next_y_vals.push_back(y_point);
+            }
+
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           	msgJson["next_x"] = next_x_vals;

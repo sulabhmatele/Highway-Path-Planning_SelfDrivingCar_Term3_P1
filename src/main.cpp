@@ -15,6 +15,13 @@ using namespace std;
 // for convenience
 using json = nlohmann::json;
 
+enum direction
+{
+    left,
+    right,
+    inlane
+};
+
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
@@ -160,6 +167,50 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
+void laneShift(int &lane, bool tooCloseOnLeft, bool tooCloseOnRight)
+{
+    if ((lane > 0) && (!tooCloseOnLeft))
+    {
+        lane--;
+        cout << "Change Lane :: Left " << endl;
+    }
+    else if ((lane < 2) && (!tooCloseOnRight))
+    {
+        lane++;
+        cout << "Change Lane :: Right "<< endl;
+    }
+    else
+    {
+        cout << "Change Lane :: Not Possible "<< endl;
+    }
+}
+
+bool findTooClose(vector<double> sensor_fusion, double car_s, int prev_size, int predictFactor, direction dir)
+{
+    double vx = sensor_fusion[3];
+    double vy = sensor_fusion[4];
+    double check_car_s = sensor_fusion[5];
+
+    double check_speed = sqrt(vx * vx + vy * vy);
+
+    // predict this car in future
+    check_car_s +=((double) prev_size * 0.02 * predictFactor * check_speed);
+
+    //check if car is in front and also how much is the gap
+    bool frontResult = ((check_car_s > car_s) && (check_car_s - car_s < 30));
+    bool backResult = false;
+
+    if(dir == direction::inlane)
+    {
+        return frontResult;
+    }
+    else
+    {
+        backResult = ((check_car_s < car_s) && (car_s - check_car_s < 5));
+        return (frontResult || backResult);
+    }
+}
+
 int main() {
   uWS::Hub h;
 
@@ -266,7 +317,9 @@ int main() {
                 car_s = end_path_s;
             }
 
-            bool too_close = false;
+            bool tooCloseInLane = false;
+            bool tooCloseOnLeft = false;
+            bool tooCloseOnRight = false;
 
             for (auto &i : sensor_fusion)
             {
@@ -275,27 +328,27 @@ int main() {
 
                 if((d < (2 + 4 * lane_num + 2)) && (d > (2 + 4 * lane_num - 2)))
                 {
-                    double vx = i[3];
-                    double vy = i[4];
+                    tooCloseInLane = tooCloseInLane || findTooClose(i, car_s, prev_size, 1, direction::inlane);
+                }
 
-                    double check_speed = sqrt(vx * vx + vy * vy);
-
-                    double check_car_s = i[5];
-
-                    // predict this car in future
-                    check_car_s +=((double) prev_size * 0.02 * check_speed);
-
-                    //check if car is in front and also how much is the gap
-                    if((check_car_s > car_s) && (check_car_s - car_s < 30))
-                    {
-                        too_close = true;
-                    }
+                if ((lane_num != 0) && (d < (2 + 4 * (lane_num - 1) + 2))
+                    && (d > (2 + 4 * (lane_num - 1) - 2)))
+                {
+                    tooCloseOnLeft = tooCloseOnLeft || findTooClose(i, car_s, prev_size, 2, direction::left);
+                }
+                if ((lane_num != 2) && (d < (2 + 4 * (lane_num + 1) + 2))
+                    && (d > (2 + 4 * (lane_num + 1) - 2)))
+                {
+                    tooCloseOnRight = tooCloseOnRight || findTooClose(i, car_s, prev_size, 2, direction::right);
                 }
             }
 
-            if (too_close)
+            if (tooCloseInLane)
             {
+                cout << "Front Car too close : Decrease Speed : Try Lane change "<< endl;
+
                 ref_v -= 0.224;
+                laneShift(lane_num, tooCloseOnLeft, tooCloseOnRight);
             }
             else if(ref_v < 49.5)
             {

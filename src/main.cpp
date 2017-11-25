@@ -273,7 +273,7 @@ int main() {
                 //find if car is in my lane
                 float d = i[6];
 
-                if((d < (2 + 4 * lane_num + 2)) && (d > (2 + 4 * lane_num + 2)))
+                if((d < (2 + 4 * lane_num + 2)) && (d > (2 + 4 * lane_num - 2)))
                 {
                     double vx = i[3];
                     double vy = i[4];

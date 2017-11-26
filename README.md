@@ -1,6 +1,6 @@
 # Highway-Path-Planning_SelfDrivingCar_Term3_P1
 
-###Introduction
+### Introduction
 
 This project is the Udacity "Self Driving Car" nanodegree program's term 3, project 1. 
 As part of this project, main requirement is to autonomously drive the car around the track of 4.32 miles without any incident.
@@ -11,21 +11,27 @@ Here incident refers to following categories:
 - Keeping the given speed limit of 50mph
 - No collision with other cars
 - Keeping the lane
-- When there is a vehicle in front which is driving below speed limit, then try to possible change lane 
+- When there is a vehicle in front, which is driving below speed limit, then try to safely change lane 
 - At any time, total acceleration of 10 m/s^2 and a jerk of 10 m/s^3 should not be exceeded, which makes it uncomfortable for passenger
 
+# [Click here for the output video](https://www.youtube.com/watch?v=z2zQVCEmAXQ&t=11s)
 
-###Rubric Points
+![alt text](https://github.com/sulabhmatele/Highway-Path-Planning_SelfDrivingCar_Term3_P1/blob/master/data/SimulatorScreenShot.png)
+
+![alt text](https://github.com/sulabhmatele/Highway-Path-Planning_SelfDrivingCar_Term3_P1/blob/master/data/Simulator2.png)
+
+### Rubric Points
 
 Please find the video from above link, the view the output of path planner. 
 
 The path planner satisfies all the requirements, and car drives indefinitely on track in any traffic situations.
 
-#### Model Documentation
-This project can have n number of different way to deal with the required problems. I have followed the approach to create a small Finite State Machine model, which takes care of taking different decisions based on the current state and also takes care of avoiding all incidents.
+### Model Documentation
+This project can have 'n' number of different way to deal with the required problems. I have followed the approach to create a small Finite State Machine model, which takes care of taking different decisions based on the current state and also takes care of avoiding all incidents.
 
+![alt text](https://github.com/sulabhmatele/Highway-Path-Planning_SelfDrivingCar_Term3_P1/blob/master/data/HighwayPathPlannerFSM.png)
 
-#####States Description
+#### States Description
 
 -  Keep Lane
 
@@ -46,7 +52,7 @@ During this state, car changes lane, and then speeds up to reach max allowed spe
 
 This state is different than left lane change, since it gets priority when cost of changing lane becomes same for left and right. The logic is to avoid reaching to left lane which is also considered as the fast lane for highways.
 
-##### Information In-outs
+### Information In-outs
 
 We are provided with the different way points around the track to follow. 
 
@@ -66,7 +72,7 @@ We are provided with the different way points around the track to follow.
 -- It also provides the list of remaining points, which are not yet visited by simulator and provided as last path points.
 
 
-##### Path generation steps
+### Path generation steps
 
 - Our main goal is to create a path which is free from jerks and acceleration limits. For that the most important point to remember is, the path should be continuous, means we should try to utilize the previous path points which were provided to simulator.
 

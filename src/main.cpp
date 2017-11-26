@@ -167,21 +167,46 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
-void laneShift(int &lane, bool tooCloseOnLeft, bool tooCloseOnRight)
+bool laneChangeInitiated = false;
+int laneChangeWait = 0;
+
+void laneShift(int &lane, double car_d, bool tooCloseOnLeft, bool tooCloseOnRight)
 {
-    if ((lane > 0) && (!tooCloseOnLeft))
+    if(!laneChangeInitiated)
     {
-        lane--;
-        cout << "Change Lane :: Left " << endl;
-    }
-    else if ((lane < 2) && (!tooCloseOnRight))
-    {
-        lane++;
-        cout << "Change Lane :: Right "<< endl;
+        if ((lane > 0) && (!tooCloseOnLeft)) {
+            lane--;
+            laneChangeInitiated = true;
+
+            cout << "Change Lane :: Left initiated " << endl;
+        }
+        else if ((lane < 2) && (!tooCloseOnRight)) {
+            lane++;
+            laneChangeInitiated = true;
+
+            cout << "Change Lane :: Right initiated " << endl;
+        }
+        else {
+            cout << "Change Lane : Not Possible : Car On Left: " << tooCloseOnLeft << "  : Car on Right: " << tooCloseOnRight << endl;
+        }
     }
     else
     {
-        cout << "Change Lane :: Not Possible "<< endl;
+        if((car_d < (2 + 4 * lane + 2)) && (car_d > (2 + 4 * lane - 2)))
+        {
+            cout << "Change Lane :: Completed " << endl;
+
+            if(laneChangeWait > 10)
+            {
+                laneChangeInitiated = false;
+                laneChangeWait = 0;
+            }
+            else
+            {
+                laneChangeWait++;
+                cout << "Change Lane Wait::  " << laneChangeWait << endl;
+            }
+        }
     }
 }
 
@@ -206,7 +231,7 @@ bool findTooClose(vector<double> sensor_fusion, double car_s, int prev_size, int
     }
     else
     {
-        backResult = ((check_car_s < car_s) && (car_s - check_car_s < 5));
+        backResult = ((check_car_s <= car_s) && (car_s - check_car_s < 15));
         return (frontResult || backResult);
     }
 }
@@ -348,11 +373,15 @@ int main() {
                 cout << "Front Car too close : Decrease Speed : Try Lane change "<< endl;
 
                 ref_v -= 0.224;
-                laneShift(lane_num, tooCloseOnLeft, tooCloseOnRight);
+                laneShift(lane_num, car_d, tooCloseOnLeft, tooCloseOnRight);
             }
             else if(ref_v < 49.5)
             {
                 ref_v += 0.224;
+            }
+            else
+            {
+                cout << "Keep Lane : No Change required "<< endl;
             }
 
             // Widely spaced points in 30m apart then fit spline and fill the points to get ref v

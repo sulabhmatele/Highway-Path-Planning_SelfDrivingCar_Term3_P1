@@ -194,7 +194,7 @@ void printFsmState(fsmStates fsm)
 {
     if(fsm == fsmStates::keepLane)
     {
-        cout << "FsmState :: Keep Lane :: "<< endl;
+        cout << "Current FsmState :: Keep Lane :: "<< endl;
     }
     else if(fsm == fsmStates::prepareLaneChange)
     {
@@ -221,7 +221,7 @@ void changeFsmState(fsmStates fsm)
 
 void printLaneDistances(bool tooCloseOnLeft, bool tooCloseOnRight)
 {
-    cout << "Car Presence : Left: " << tooCloseOnLeft << "  : Right: " << tooCloseOnRight << endl;
+    cout << "Car Presence : Left: " << (tooCloseOnLeft ? "true" : "false") << "  : Right: " << (tooCloseOnRight ? "true" : "false") << endl;
     cout << "Nearest Car On : Left Front: " << closestLeftCarFrontDist << "  : Right Front: " << closestRightCarFrontDist << endl;
     cout << "Nearest Car On : Left Back: " << closestLeftCarBackDist << "  : Right Back: " << closestRightCarBackDist << endl;
     cout << "================================================================================" << endl;
@@ -239,25 +239,25 @@ double costOfLaneChange(int lane, direction dir)
         }
         else if(direction::right == dir)
         {
-            cost = (maxCostFront - closestRightCarFrontDist);// + (maxCostBack - closestRightCarBackDist);
+            cost = (maxCostFront - closestRightCarFrontDist);
         }
     }
     else if(1 == lane)
     {
         if(direction::left == dir)
         {
-            cost = (maxCostFront - closestLeftCarFrontDist);// + (maxCostBack - closestLeftCarBackDist);
+            cost = (maxCostFront - closestLeftCarFrontDist);
         }
         else if(direction::right == dir)
         {
-            cost = (maxCostFront - closestRightCarFrontDist);// + (maxCostBack - closestRightCarBackDist);
+            cost = (maxCostFront - closestRightCarFrontDist);
         }
     }
     else if(2 == lane)
     {
         if(direction::left == dir)
         {
-            cost = (maxCostFront - closestLeftCarFrontDist);// + (maxCostBack - closestLeftCarBackDist);
+            cost = (maxCostFront - closestLeftCarFrontDist);
         }
         else if(direction::right == dir)
         {
@@ -301,7 +301,7 @@ void tryLaneShift(int &lane, double car_d, bool tooCloseOnLeft, bool tooCloseOnR
     }
     else
     {
-        cout << "+++++++++++ Lane Change Not Possible ++++++++++++++++++++++++" << endl;
+        cout << "+++++++++++ Lane Change Not Possible +++++++++++++++++" << endl;
         printLaneDistances(tooCloseOnLeft, tooCloseOnRight);
     }
 }
@@ -381,7 +381,7 @@ bool findTooClose(vector<double> sensor_fusion, double car_s, int prev_size, int
         if(check_car_s <= car_s)
         {
             backCarDist = car_s - check_car_s;
-            backResult = (backCarDist < 20) || (check_car_s == car_s);
+            backResult = (backCarDist < 10) || (check_car_s == car_s);
         }
         result = (frontResult || backResult);
     }
@@ -526,7 +526,7 @@ int main() {
             }
             if (tooCloseInLane)
             {
-                ref_v -= 0.4;
+                ref_v -= 0.5;
 
                 if(!laneChangeInitiated)
                 {
@@ -534,9 +534,9 @@ int main() {
                     tryLaneShift(lane_num, car_d, tooCloseOnLeft, tooCloseOnRight);
                 }
             }
-            else if(ref_v < 49.5)
+            else if(ref_v < 49)
             {
-                ref_v += 0.5;
+                ref_v += 0.6;
             }
             else
             {

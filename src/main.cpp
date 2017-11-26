@@ -22,6 +22,17 @@ enum direction
     inlane
 };
 
+enum fsmStates
+{
+    keepLane,
+    prepareLaneChange,
+    laneChangeLeft,
+    laneChangeRight
+};
+
+const int maxCostFront = 50;
+const int maxCostBack = 30;
+
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
@@ -168,45 +179,168 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 }
 
 bool laneChangeInitiated = false;
-int laneChangeWait = 0;
+int laneChangeWait = 15;
 
-void laneShift(int &lane, double car_d, bool tooCloseOnLeft, bool tooCloseOnRight)
+double closestLeftCarFrontDist = maxCostFront;
+double closestLeftCarBackDist = maxCostBack;
+double closestRightCarFrontDist = maxCostFront;
+double closestRightCarBackDist = maxCostBack;
+double closestInLaneCarFrontDist = maxCostFront;
+double closestInLaneCarBackDist = maxCostBack;
+
+fsmStates logicalFsmState = fsmStates::keepLane;
+
+void printFsmState(fsmStates fsm)
 {
-    if(!laneChangeInitiated)
+    if(fsm == fsmStates::keepLane)
     {
-        if ((lane > 0) && (!tooCloseOnLeft)) {
-            lane--;
-            laneChangeInitiated = true;
+        cout << "FsmState :: Keep Lane :: "<< endl;
+    }
+    else if(fsm == fsmStates::prepareLaneChange)
+    {
+        cout << "FsmState :: Prepare Lane Change : Front Car too close : Decrease Speed : Try Lane change "<< endl;
+    }
+    else if(fsm == fsmStates::laneChangeLeft)
+    {
+        cout << "FsmState :: Change Lane Left : Left initiated " << endl;
+    }
+    else if(fsm == fsmStates::laneChangeRight)
+    {
+        cout << "FsmState :: Change Lane Right : Right initiated " << endl;
+    }
+}
 
-            cout << "Change Lane :: Left initiated " << endl;
-        }
-        else if ((lane < 2) && (!tooCloseOnRight)) {
-            lane++;
-            laneChangeInitiated = true;
+void changeFsmState(fsmStates fsm)
+{
+    if(logicalFsmState != fsm)
+    {
+        logicalFsmState = fsm;
+        printFsmState(fsm);
+    }
+}
 
-            cout << "Change Lane :: Right initiated " << endl;
+void printLaneDistances(bool tooCloseOnLeft, bool tooCloseOnRight)
+{
+    cout << "Car Presence : Left: " << tooCloseOnLeft << "  : Right: " << tooCloseOnRight << endl;
+    cout << "Nearest Car On : Left Front: " << closestLeftCarFrontDist << "  : Right Front: " << closestRightCarFrontDist << endl;
+    cout << "Nearest Car On : Left Back: " << closestLeftCarBackDist << "  : Right Back: " << closestRightCarBackDist << endl;
+    cout << "================================================================================" << endl;
+}
+
+double costOfLaneChange(int lane, direction dir)
+{
+    double cost = 100;
+
+    if(0 == lane)
+    {
+        if(direction::left == dir)
+        {
+            return cost;
         }
-        else {
-            cout << "Change Lane : Not Possible : Car On Left: " << tooCloseOnLeft << "  : Car on Right: " << tooCloseOnRight << endl;
+        else if(direction::right == dir)
+        {
+            cost = (maxCostFront - closestRightCarFrontDist);// + (maxCostBack - closestRightCarBackDist);
         }
+    }
+    else if(1 == lane)
+    {
+        if(direction::left == dir)
+        {
+            cost = (maxCostFront - closestLeftCarFrontDist);// + (maxCostBack - closestLeftCarBackDist);
+        }
+        else if(direction::right == dir)
+        {
+            cost = (maxCostFront - closestRightCarFrontDist);// + (maxCostBack - closestRightCarBackDist);
+        }
+    }
+    else if(2 == lane)
+    {
+        if(direction::left == dir)
+        {
+            cost = (maxCostFront - closestLeftCarFrontDist);// + (maxCostBack - closestLeftCarBackDist);
+        }
+        else if(direction::right == dir)
+        {
+            return cost;
+        }
+    }
+
+    return cost;
+}
+
+void tryLaneShift(int &lane, double car_d, bool tooCloseOnLeft, bool tooCloseOnRight)
+{
+    double leftChangeCost = costOfLaneChange(lane, direction::left);
+    double rightChangeCost = costOfLaneChange(lane, direction::right);
+
+    cout << "LeftChangeCost : " << leftChangeCost << " ,RightChangeCost : " << rightChangeCost << endl;
+
+    if ((leftChangeCost < rightChangeCost) && (leftChangeCost < 15) && (!tooCloseOnLeft))
+    {
+        lane--;
+        laneChangeInitiated = true;
+
+        changeFsmState(fsmStates::laneChangeLeft);
+        printLaneDistances(tooCloseOnLeft, tooCloseOnRight);
+    }
+    else if ((rightChangeCost < leftChangeCost) && (rightChangeCost < 15) && (!tooCloseOnRight))
+    {
+        lane++;
+        laneChangeInitiated = true;
+
+        changeFsmState(fsmStates::laneChangeRight);
+        printLaneDistances(tooCloseOnLeft, tooCloseOnRight);
+    }
+    else if ((rightChangeCost == 0) && (leftChangeCost == 0) && (rightChangeCost < 30) && (!tooCloseOnRight))
+    {
+        lane++;
+        laneChangeInitiated = true;
+
+        changeFsmState(fsmStates::laneChangeRight);
+        printLaneDistances(tooCloseOnLeft, tooCloseOnRight);
     }
     else
     {
-        if((car_d < (2 + 4 * lane + 2)) && (car_d > (2 + 4 * lane - 2)))
-        {
-            cout << "Change Lane :: Completed " << endl;
+        cout << "+++++++++++ Lane Change Not Possible ++++++++++++++++++++++++" << endl;
+        printLaneDistances(tooCloseOnLeft, tooCloseOnRight);
+    }
+}
 
-            if(laneChangeWait > 10)
-            {
-                laneChangeInitiated = false;
-                laneChangeWait = 0;
-            }
-            else
-            {
-                laneChangeWait++;
-                cout << "Change Lane Wait::  " << laneChangeWait << endl;
-            }
-        }
+void updateDistances(direction dir, double frontCarDist, double backCarDist)
+{
+    if(dir == direction::inlane)
+    {
+        (frontCarDist < closestInLaneCarFrontDist) ? closestInLaneCarFrontDist = frontCarDist : closestInLaneCarFrontDist;
+        (backCarDist < closestInLaneCarBackDist ) ? closestInLaneCarBackDist = backCarDist : closestInLaneCarBackDist;
+    }
+    else if(dir == direction::left)
+    {
+        (frontCarDist < closestLeftCarFrontDist) ? closestLeftCarFrontDist = frontCarDist : closestLeftCarFrontDist;
+        (backCarDist < closestLeftCarBackDist ) ? closestLeftCarBackDist = backCarDist : closestLeftCarBackDist;
+    }
+    else if(dir == direction::right)
+    {
+        (frontCarDist < closestRightCarFrontDist) ? closestRightCarFrontDist = frontCarDist : closestRightCarFrontDist;
+        (backCarDist < closestRightCarBackDist ) ? closestRightCarBackDist = backCarDist : closestRightCarBackDist;
+    }
+}
+
+void getDistances(direction dir, double &frontCarDist, double &backCarDist)
+{
+    if(dir == direction::inlane)
+    {
+        frontCarDist = closestInLaneCarFrontDist;
+        backCarDist = closestInLaneCarBackDist;
+    }
+    else if(dir == direction::left)
+    {
+        frontCarDist = closestLeftCarFrontDist;
+        backCarDist = closestLeftCarBackDist;
+    }
+    else if(dir == direction::right)
+    {
+        frontCarDist = closestRightCarFrontDist;
+        backCarDist = closestRightCarBackDist;
     }
 }
 
@@ -222,18 +356,38 @@ bool findTooClose(vector<double> sensor_fusion, double car_s, int prev_size, int
     check_car_s +=((double) prev_size * 0.02 * predictFactor * check_speed);
 
     //check if car is in front and also how much is the gap
-    bool frontResult = ((check_car_s > car_s) && (check_car_s - car_s < 30));
+    double frontCarDist = maxCostFront;
+    double backCarDist = maxCostBack;
+
+    getDistances(dir, frontCarDist, backCarDist);
+
+    bool result = false;
+    bool frontResult = false;
+
+    if(check_car_s > car_s)
+    {
+        frontCarDist = check_car_s - car_s;
+        frontResult = (frontCarDist < 30);
+    }
+
     bool backResult = false;
 
     if(dir == direction::inlane)
     {
-        return frontResult;
+        result = frontResult;
     }
     else
     {
-        backResult = ((check_car_s <= car_s) && (car_s - check_car_s < 15));
-        return (frontResult || backResult);
+        if(check_car_s <= car_s)
+        {
+            backCarDist = car_s - check_car_s;
+            backResult = (backCarDist < 20) || (check_car_s == car_s);
+        }
+        result = (frontResult || backResult);
     }
+
+    updateDistances(dir, frontCarDist, backCarDist);
+    return result;
 }
 
 int main() {
@@ -272,6 +426,8 @@ int main() {
   	map_waypoints_dx.push_back(d_x);
   	map_waypoints_dy.push_back(d_y);
   }
+
+    printFsmState(logicalFsmState);
 
   int lane_num = 1;
   double ref_v = 0;
@@ -317,26 +473,6 @@ int main() {
 
             int prev_size = previous_path_x.size();
 
-/*			int nextWayPoint = NextWaypoint(car_x, car_y, deg2rad(car_yaw), map_waypoints_x, map_waypoints_y);
-
-            double nextWP_s = map_waypoints_s[nextWayPoint];
-            double nextWP_dx = map_waypoints_dx[nextWayPoint];
-            double nextWP_dy = map_waypoints_dy[nextWayPoint];*/
-
-/*            double dist_inc = 0.4;
-            for(int i = 0; i < 50; i++)
-            {
-                double next_s = car_s + (i + 1) * dist_inc;
-                double next_d = 2;
-
-                vector<double> nextXY = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-
-                next_x_vals.push_back(nextXY[0]);//car_x+(dist_inc*i)*cos(deg2rad(car_yaw)));
-                next_y_vals.push_back(nextXY[1]);//car_y+(dist_inc*i)*sin(deg2rad(car_yaw)));
-
-                car_yaw = car_yaw + (car_speed/0.442) * tan(car_yaw);
-            }*/
-
             if(prev_size > 0)
             {
                 car_s = end_path_s;
@@ -345,6 +481,13 @@ int main() {
             bool tooCloseInLane = false;
             bool tooCloseOnLeft = false;
             bool tooCloseOnRight = false;
+
+            closestLeftCarFrontDist = maxCostFront;
+            closestLeftCarBackDist = maxCostBack;
+            closestRightCarFrontDist = maxCostFront;
+            closestRightCarBackDist = maxCostBack;
+            closestInLaneCarFrontDist = maxCostFront;
+            closestInLaneCarBackDist = maxCostBack;
 
             for (auto &i : sensor_fusion)
             {
@@ -359,29 +502,46 @@ int main() {
                 if ((lane_num != 0) && (d < (2 + 4 * (lane_num - 1) + 2))
                     && (d > (2 + 4 * (lane_num - 1) - 2)))
                 {
-                    tooCloseOnLeft = tooCloseOnLeft || findTooClose(i, car_s, prev_size, 2, direction::left);
+                    tooCloseOnLeft = tooCloseOnLeft || findTooClose(i, car_s, prev_size, 1, direction::left);
                 }
                 if ((lane_num != 2) && (d < (2 + 4 * (lane_num + 1) + 2))
                     && (d > (2 + 4 * (lane_num + 1) - 2)))
                 {
-                    tooCloseOnRight = tooCloseOnRight || findTooClose(i, car_s, prev_size, 2, direction::right);
+                    tooCloseOnRight = tooCloseOnRight || findTooClose(i, car_s, prev_size, 1, direction::right);
                 }
             }
 
+            if((laneChangeInitiated) && (car_d < (2 + 4 * lane_num + 2)) && (car_d > (2 + 4 * lane_num - 2)))
+            {
+                if(laneChangeWait <= 0)
+                {
+                    laneChangeInitiated = false;
+                    laneChangeWait = 0;
+                }
+                else
+                {
+                    laneChangeWait--;
+                    cout << "Change Lane Stabilization::  " << endl;
+                }
+            }
             if (tooCloseInLane)
             {
-                cout << "Front Car too close : Decrease Speed : Try Lane change "<< endl;
+                ref_v -= 0.4;
 
-                ref_v -= 0.224;
-                laneShift(lane_num, car_d, tooCloseOnLeft, tooCloseOnRight);
+                if(!laneChangeInitiated)
+                {
+                    changeFsmState(fsmStates::prepareLaneChange);
+                    tryLaneShift(lane_num, car_d, tooCloseOnLeft, tooCloseOnRight);
+                }
             }
             else if(ref_v < 49.5)
             {
-                ref_v += 0.224;
+                ref_v += 0.5;
             }
             else
             {
-                cout << "Keep Lane : No Change required "<< endl;
+                changeFsmState(fsmStates::keepLane);
+                laneChangeWait = 0;
             }
 
             // Widely spaced points in 30m apart then fit spline and fill the points to get ref v

@@ -15,24 +15,6 @@ using namespace std;
 // for convenience
 using json = nlohmann::json;
 
-enum direction
-{
-    left,
-    right,
-    inlane
-};
-
-enum fsmStates
-{
-    keepLane,
-    prepareLaneChange,
-    laneChangeLeft,
-    laneChangeRight
-};
-
-const int maxCostFront = 50;
-const int maxCostBack = 30;
-
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
@@ -178,9 +160,45 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
+/****************************************************************/
+/* Defining Enum for direction */
+/****************************************************************/
+enum direction
+{
+    left,
+    right,
+    inlane
+};
+
+/****************************************************************/
+/* Defining Enum for FSM states */
+/****************************************************************/
+enum fsmStates
+{
+    keepLane,
+    prepareLaneChange,
+    laneChangeLeft,
+    laneChangeRight
+};
+
+/* Model FSM state */
+fsmStates logicalFsmState = fsmStates::keepLane;
+
+/****************************************************************/
+/* Constants to take care of max cost decision */
+/****************************************************************/
+const int maxCostFront = 50;
+const int maxCostBack = 30;
+
+/****************************************************************/
+/* Following flags take care of different lane change logics */
+/****************************************************************/
 bool laneChangeInitiated = false;
 int laneChangeWait = 15;
 
+/****************************************************************/
+/* Following varibales take care of tracking different cars on road */
+/****************************************************************/
 double closestLeftCarFrontDist = maxCostFront;
 double closestLeftCarBackDist = maxCostBack;
 double closestRightCarFrontDist = maxCostFront;
@@ -188,8 +206,20 @@ double closestRightCarBackDist = maxCostBack;
 double closestInLaneCarFrontDist = maxCostFront;
 double closestInLaneCarBackDist = maxCostBack;
 
-fsmStates logicalFsmState = fsmStates::keepLane;
+/****************************************************************/
+/* Following method prints the other closest cars state and distances */
+/****************************************************************/
+void printLaneDistances(bool tooCloseOnLeft, bool tooCloseOnRight)
+{
+    cout << "Car Presence : Left: " << (tooCloseOnLeft ? "true" : "false") << "  : Right: " << (tooCloseOnRight ? "true" : "false") << endl;
+    cout << "Nearest Car On : Left Front: " << closestLeftCarFrontDist << "  : Right Front: " << closestRightCarFrontDist << endl;
+    cout << "Nearest Car On : Left Back: " << closestLeftCarBackDist << "  : Right Back: " << closestRightCarBackDist << endl;
+    cout << "================================================================================" << endl;
+}
 
+/****************************************************************/
+/* Following method takes care of printing FSM state */
+/****************************************************************/
 void printFsmState(fsmStates fsm)
 {
     if(fsm == fsmStates::keepLane)
@@ -210,6 +240,9 @@ void printFsmState(fsmStates fsm)
     }
 }
 
+/****************************************************************/
+/* Following method takes care of updating the system fsm state */
+/****************************************************************/
 void changeFsmState(fsmStates fsm)
 {
     if(logicalFsmState != fsm)
@@ -219,14 +252,10 @@ void changeFsmState(fsmStates fsm)
     }
 }
 
-void printLaneDistances(bool tooCloseOnLeft, bool tooCloseOnRight)
-{
-    cout << "Car Presence : Left: " << (tooCloseOnLeft ? "true" : "false") << "  : Right: " << (tooCloseOnRight ? "true" : "false") << endl;
-    cout << "Nearest Car On : Left Front: " << closestLeftCarFrontDist << "  : Right Front: " << closestRightCarFrontDist << endl;
-    cout << "Nearest Car On : Left Back: " << closestLeftCarBackDist << "  : Right Back: " << closestRightCarBackDist << endl;
-    cout << "================================================================================" << endl;
-}
-
+/****************************************************************/
+/* Following method calculates the cost of changing lane to forward, the back side cars
+ * are taken care by tooClose** variables */
+/****************************************************************/
 double costOfLaneChange(int lane, direction dir)
 {
     double cost = 100;
@@ -268,6 +297,11 @@ double costOfLaneChange(int lane, direction dir)
     return cost;
 }
 
+/****************************************************************/
+/* Following method takes the final decision on lane change based on different factors,
+ * mainly the cost of change, and if there is any car too close from back which could
+ * result in collision if lane change is performed */
+/****************************************************************/
 void tryLaneShift(int &lane, double car_d, bool tooCloseOnLeft, bool tooCloseOnRight)
 {
     double leftChangeCost = costOfLaneChange(lane, direction::left);
@@ -291,6 +325,7 @@ void tryLaneShift(int &lane, double car_d, bool tooCloseOnLeft, bool tooCloseOnR
         changeFsmState(fsmStates::laneChangeRight);
         printLaneDistances(tooCloseOnLeft, tooCloseOnRight);
     }
+    // Prefer taking right, if both lane has 0 cost, since, on highway left most lane is kept for fast running cars
     else if ((rightChangeCost == 0) && (leftChangeCost == 0) && (rightChangeCost < 30) && (!tooCloseOnRight))
     {
         lane++;
@@ -301,11 +336,15 @@ void tryLaneShift(int &lane, double car_d, bool tooCloseOnLeft, bool tooCloseOnR
     }
     else
     {
-        cout << "+++++++++++ Lane Change Not Possible +++++++++++++++++" << endl;
+        cout << "+++++++++++ Lane Change Not Safe +++++++++++++++++" << endl;
         printLaneDistances(tooCloseOnLeft, tooCloseOnRight);
     }
 }
 
+/****************************************************************/
+/* Following method updates the different distance variables, based on if the detected car
+ * is in lane, left or right */
+/****************************************************************/
 void updateDistances(direction dir, double frontCarDist, double backCarDist)
 {
     if(dir == direction::inlane)
@@ -325,6 +364,9 @@ void updateDistances(direction dir, double frontCarDist, double backCarDist)
     }
 }
 
+/****************************************************************/
+/* Following method retrieves different distances */
+/****************************************************************/
 void getDistances(direction dir, double &frontCarDist, double &backCarDist)
 {
     if(dir == direction::inlane)
@@ -344,44 +386,51 @@ void getDistances(direction dir, double &frontCarDist, double &backCarDist)
     }
 }
 
+/****************************************************************/
+/* Following method finds if the passed car is within the range of
+ * 30m front or 10m back  */
+/****************************************************************/
 bool findTooClose(vector<double> sensor_fusion, double car_s, int prev_size, int predictFactor, direction dir)
 {
     double vx = sensor_fusion[3];
     double vy = sensor_fusion[4];
-    double check_car_s = sensor_fusion[5];
+    double carFutureState = sensor_fusion[5];
 
     double check_speed = sqrt(vx * vx + vy * vy);
 
     // predict this car in future
-    check_car_s +=((double) prev_size * 0.02 * predictFactor * check_speed);
+    carFutureState +=((double) prev_size * 0.02 * predictFactor * check_speed);
 
-    //check if car is in front and also how much is the gap
     double frontCarDist = maxCostFront;
     double backCarDist = maxCostBack;
 
+    // Retrieve the existing distances
     getDistances(dir, frontCarDist, backCarDist);
 
     bool result = false;
     bool frontResult = false;
+    bool backResult = false;
 
-    if(check_car_s > car_s)
+    //check if car is in front and also how much is the gap
+    if(carFutureState > car_s)
     {
-        frontCarDist = check_car_s - car_s;
+        frontCarDist = carFutureState - car_s;
         frontResult = (frontCarDist < 30);
     }
 
-    bool backResult = false;
-
+    // In current lane check the front car only
     if(dir == direction::inlane)
     {
         result = frontResult;
     }
+    // For right and left, also check the cars on back, so we could decide when its
+        // safe distance for lane change
     else
     {
-        if(check_car_s <= car_s)
+        if(carFutureState <= car_s)
         {
-            backCarDist = car_s - check_car_s;
-            backResult = (backCarDist < 10) || (check_car_s == car_s);
+            backCarDist = car_s - carFutureState;
+            backResult = (backCarDist < 10) || (carFutureState == car_s);
         }
         result = (frontResult || backResult);
     }
@@ -427,9 +476,12 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
+    // Print current fsm state
     printFsmState(logicalFsmState);
 
+    // lane_num variable represents the current or intended lane number
   int lane_num = 1;
+    // ref_v represents the start speed, if its more then that could cause jerk
   double ref_v = 0;
 
   h.onMessage([&lane_num, &ref_v, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
@@ -471,6 +523,7 @@ int main() {
 
           	json msgJson;
 
+            // Retrieve previous remaing points and size
             int prev_size = previous_path_x.size();
 
             if(prev_size > 0)
@@ -478,10 +531,12 @@ int main() {
                 car_s = end_path_s;
             }
 
+            // Following varibales, represents the state if there is any car nearby
             bool tooCloseInLane = false;
             bool tooCloseOnLeft = false;
             bool tooCloseOnRight = false;
 
+            // Reset all variables, since other cars might have moved, and recalculate the distances
             closestLeftCarFrontDist = maxCostFront;
             closestLeftCarBackDist = maxCostBack;
             closestRightCarFrontDist = maxCostFront;
@@ -489,21 +544,25 @@ int main() {
             closestInLaneCarFrontDist = maxCostFront;
             closestInLaneCarBackDist = maxCostBack;
 
+            // From sensor fusion data set, find the cars in left, right and front
             for (auto &i : sensor_fusion)
-            {
-                //find if car is in my lane
+            {   // Evaluate each car
                 float d = i[6];
 
+                //find if car is in my lane
                 if((d < (2 + 4 * lane_num + 2)) && (d > (2 + 4 * lane_num - 2)))
                 {
                     tooCloseInLane = tooCloseInLane || findTooClose(i, car_s, prev_size, 1, direction::inlane);
                 }
 
+                //find if car is in left lane
                 if ((lane_num != 0) && (d < (2 + 4 * (lane_num - 1) + 2))
                     && (d > (2 + 4 * (lane_num - 1) - 2)))
                 {
                     tooCloseOnLeft = tooCloseOnLeft || findTooClose(i, car_s, prev_size, 1, direction::left);
                 }
+
+                //find if car is in right lane
                 if ((lane_num != 2) && (d < (2 + 4 * (lane_num + 1) + 2))
                     && (d > (2 + 4 * (lane_num + 1) - 2)))
                 {
@@ -511,8 +570,10 @@ int main() {
                 }
             }
 
+            // If the lane change is initiated, then wait for next decision, until car reaches the intended lane
             if((laneChangeInitiated) && (car_d < (2 + 4 * lane_num + 2)) && (car_d > (2 + 4 * lane_num - 2)))
             {
+                // Change wait gives some stabilization room for car to avoid sudden changes to multiple lanes
                 if(laneChangeWait <= 0)
                 {
                     laneChangeInitiated = false;
@@ -524,6 +585,8 @@ int main() {
                     cout << "Change Lane Stabilization::  " << endl;
                 }
             }
+            // If the front car is too close, then decrease speed and try changing lane,
+            // if already not initiated
             if (tooCloseInLane)
             {
                 ref_v -= 0.5;
@@ -534,10 +597,12 @@ int main() {
                     tryLaneShift(lane_num, car_d, tooCloseOnLeft, tooCloseOnRight);
                 }
             }
+            // If not too close then increase speed to reach maximum allowed limit
             else if(ref_v < 49)
             {
                 ref_v += 0.6;
             }
+            // When maximum allowed speed limit reached then keep the lane
             else
             {
                 changeFsmState(fsmStates::keepLane);
@@ -626,7 +691,8 @@ int main() {
             double dist_inc = 0.44;
             for(int i = 1; i < 50-prev_size; i++)
             {
-                double N = (target_dist/(0.02 * ref_v/2.24)); // steps req for desired speed = distance/distance/sec ; 2.24 - makes miles per hour to meters per sec ??????? 22.4 ???
+                // N steps req for desired speed = distance/distance/sec ; 2.24 - makes miles per hour to meters per sec
+                double N = (target_dist/(0.02 * ref_v/2.24));
 
                 double x_point = x_add_on + (target_x/N);
                 double y_point = fit_s(x_point);
